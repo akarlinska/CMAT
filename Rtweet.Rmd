@@ -1,0 +1,179 @@
+---
+title: 'Pozyskiwanie danych: web scraping i API'
+author: "Agnieszka Karlińska"
+output: html_notebook
+---
+
+# Web scraping na przykładzie Wikipedii
+
+```{r}
+library(rvest)
+library(selectr)
+```
+
+```{r}
+woj_wiki <- read_html("https://pl.wikipedia.org/wiki/Wojew%C3%B3dztwo")
+woj_wiki
+```
+
+```{r}
+woj_wiki_section <- html_node(woj_wiki, xpath ='//*[@id="mw-content-text"]/div[1]/table[1]')
+head(woj_wiki_section)
+```
+
+```{r}
+woj_tab <- html_table(woj_wiki_section)
+head(woj_tab[,c(1:2, 4:6)])
+```
+
+# API na przykładzie Twittera
+
+```{r}
+library(rtweet)
+
+api_key <- "xxxx"
+api_secret_key <- "xxxx"
+```
+
+```{r}
+token <- create_token(
+  app = "xxxx",
+  consumer_key = api_key,
+  consumer_secret = api_secret_key)
+```
+
+## Tweety na dany temat
+
+```{r}
+vaccine_tweets <- search_tweets("vaccine", n = 2000)
+```
+
+```{r}
+?search_tweets
+```
+
+```{r}
+names(vaccine_tweets)
+```
+
+```{r}
+head(vaccine_tweets$text)
+```
+
+```{r}
+strajk_tweets <- search_tweets("#StrajkKobiet", 
+                 n = 1000, 
+                 include_rts = TRUE, 
+                 lang = "pl")
+```
+
+```{r}
+head(strajk_tweets$text)
+```
+
+## Tweety konkretnego użytkownika
+
+```{r}
+karowa_tweets <- get_timelines(c("Karowa18"), n = 5)
+head(karowa_tweets$text)
+```
+
+```{r}
+karowa_twitter_profile <- lookup_users("Karowa18")
+```
+
+```{r}
+karowa_twitter_profile$description
+```
+
+```{r}
+karowa_twitter_profile$location
+```
+
+```{r}
+karowa_twitter_profile$followers_count
+```
+
+```{r}
+karowa_favorites <- get_favorites("Karowa18", n = 5)
+karowa_favorites$text
+```
+
+```{r}
+karowa_follows <- get_followers("Karowa18")
+head(karowa_follows)
+```
+
+```{r}
+get_trends("Gdańsk")
+```
+
+## Przykładowe wizualizacje
+
+```{r}
+ts_plot(vaccine_tweets, "secs") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(plot.title = ggplot2::element_text(face = "bold")) +
+  ggplot2::labs(
+    x = NULL, y = NULL,
+    title = "Tweety na temat szczepień w dn. 3.02.2021 (po godz. 00:00)",
+    subtitle = "Liczba tweetów na sekundę",
+    caption = "\n Źródło: dane pobrane za pomocą REST API Twittera"
+  )
+```
+
+```{r}
+vaccine_geo_tweets <- search_tweets("vaccine",
+  "lang:en", geocode = lookup_coords("usa"), 
+  n = 2000, type="recent", include_rts=FALSE
+  )
+```
+
+```{r}
+geocoded <- lat_lng(vaccine_geo_tweets)
+```
+
+```{r}
+library(maps)
+```
+
+```{r}
+par(mar = c(0, 0, 0, 0))
+maps::map("world", lwd = .25)
+with(geocoded, points(lng, lat, pch = 20, cex = .50, col = rgb(0, .3, .7, .75)))
+```
+
+## Analiza sieciowa 
+
+```{r}
+library(igraph)
+
+rtwt_df <- strajk_tweets[, c("screen_name" , "retweet_screen_name" )]
+rtwt_df_new <- rtwt_df[complete.cases(rtwt_df), ]
+rtwt_matrx <- as.matrix(rtwt_df_new)
+nw_rtweet <- graph_from_edgelist(el = rtwt_matrx, directed = TRUE)
+
+g.ec <- eigen_centrality(nw_rtweet)
+
+plot(nw_rtweet,
+vertex.label.color = "black", 
+vertex.label.cex = 0.5,
+vertex.size = 25*(g.ec$vector),
+edge.color = "gray88",
+layout = layout_nicely(nw_rtweet)
+)
+```
+
+```{r}
+which.max(g.ec$vector)
+in_degree <- degree(nw_rtweet, mode = c("in"))
+in_degree_sort <- sort(in_degree, decreasing = T)
+in_degree_sort[1:10]
+```
+
+## Eksport danych
+
+```{r}
+library(writexl)
+write_xlsx(strajk_tweets, "strajk_kobiet.xlsx")
+```
